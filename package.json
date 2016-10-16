@@ -1,0 +1,13 @@
+{
+  "name": "node-pac-proxy",
+  "version": "0.0.1",
+  "main": "index.js",
+  "license": "MIT",
+  "bin": {
+    "pac-proxy": "index.js"
+  },
+  "dependencies": {
+    "commander": "^2.9.0",
+    "socksv5": "^0.0.6"
+  }
+}
