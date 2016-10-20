@@ -54,6 +54,7 @@ function getProxyOpts(reqUrl, reqHost) {
     useSocks: true,
     proxyHost: host,
     proxyPort: port,
+    localDNS: false,
     auths: [ socksv5.auth.None() ]
   }
   else if (proxy === 'DIRECT') return {
