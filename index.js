@@ -14,7 +14,7 @@ const packageJson = require(__dirname, 'package.json')
 program
   .version(packageJson.version)
   .usage('[options] <pac-file>')
-  .option('-p, --port <n>', 'port number', parseInt, 3333)
+  .option('-p, --port <n>', 'port number', parseFloat, 3333)
   .parse(process.argv)
 
 const pacFileName = program.args[0],
