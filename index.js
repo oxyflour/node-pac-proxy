@@ -7,14 +7,13 @@ const url = require('url'),
   fs = require('fs'),
   path = require('path'),
   socksv5 = require('socksv5'),
-  program = require('commander')
-
-const packageJson = require(__dirname, 'package.json')
+  program = require('commander'),
+  packageJson = require(__dirname, 'package.json')
 
 program
   .version(packageJson.version)
   .usage('[options] <pac-file>')
-  .option('-p, --port <n>', 'port number', parseInt, 3333)
+  .option('-p, --port <n>', 'port number', parseFloat, 3333)
   .parse(process.argv)
 
 const pacFileName = program.args[0],
@@ -32,43 +31,37 @@ fs.watchFile(pacFileName, { interval: 2000 }, () => {
 })
 
 function getProxyOpts(reqUrl, reqHost) {
-  let proxy = ''
-  try {
-    proxy = FindProxyForURL(reqUrl, reqHost)
-    console.log('[i]', reqUrl, '->', proxy)
-  }
-  catch (err) {
-    return { pacError: err }
-  }
-
-  const split = proxy.split(';').shift().split(' '),
-    proxyMethod = split[0],
-    addr = split.pop().split(':'),
+  const proxyCmd = FindProxyForURL(reqUrl, reqHost),
+    proxySplit = proxyCmd.split(';').shift().split(' '),
+    proxyMethod = proxySplit[0],
+    addr = proxySplit.pop().split(':'),
     host = addr[0],
     port = parseInt(addr[1])
   if (proxyMethod === 'HTTP' || proxyMethod === 'PROXY') return {
+    proxyCmd,
     useProxy: true,
     host, port,
   }
   else if (proxyMethod === 'SOCKS5') return {
+    proxyCmd,
     useSocks: true,
     proxyHost: host,
     proxyPort: port,
     localDNS: false,
     auths: [ socksv5.auth.None() ]
   }
-  else if (proxy === 'DIRECT') return {
-    // nothing
+  else if (proxyCmd === 'DIRECT') return {
+    proxyCmd,
   }
-  else return {
-    pacError: 'not implemented'
+  else {
+    throw 'not implemented'
   }
 }
 
 function sockList(url) {
   const socks = [ ]
   function onError(err) {
-    console.log('[x]', url, '->', err)
+    console.error('ERR from: ', url, '\n    message: ', err)
     socks.forEach(sock => sock.destroy())
   }
   function regSock(sock) {
@@ -90,6 +83,12 @@ server.addListener('request', (req, res) => {
   const reqUrl = req.url.match(/^\w+:\/\//) ? req.url : 'http://' + req.url,
     regSock = sockList(reqUrl, req, res),
     parse = url.parse(reqUrl)
+
+  if (req.url.match(/\/.+\.pac$/)) {
+    res.writeHead(200, { 'Content-Type': 'application/x-javascript-config' })
+    return regSock(fs.createReadStream(pacFileName)).pipe(res)
+  }
+
   const opts = {
     host: parse.hostname,
     port: parse.port || 80,
@@ -98,13 +97,12 @@ server.addListener('request', (req, res) => {
     headers: req.headers,
   }
 
-  const proxy = getProxyOpts(req.url, parse.hostname)
-  if (proxy.pacError) {
-    res.write(`HTTP/${req.httpVersion} 500 OK\r\n\r\n${proxy.pacError || 'Boom!'}`)
-    return res.end()
+  try {
+    Object.assign(opts, getProxyOpts(reqUrl, parse.hostname))
+    console.log('[i]', reqUrl, '->', opts.proxyCmd)
   }
-  else {
-    Object.assign(opts, proxy)
+  catch (err) {
+    return res.end(`HTTP/${req.httpVersion} 500 OK\r\n\r\n${err.message || err || 'Boom!'}`)
   }
 
   if (opts.useProxy) {
@@ -135,18 +133,18 @@ server.addListener('connect', (req, res, headers) => {
   const reqUrl = req.url.match(/^\w+:\/\//) ? req.url : 'https://' + req.url,
     regSock = sockList(reqUrl, req, res),
     parse = url.parse(reqUrl)
+
   const opts = {
     host: parse.hostname,
     port: parse.port || 443,
   }
 
-  const proxy = getProxyOpts(req.url, parse.hostname)
-  if (proxy.pacError) {
-    res.write(`HTTP/${req.httpVersion} 500 OK\r\n\r\n${proxy.pacError || 'Boom!'}`)
-    return res.end()
+  try {
+    Object.assign(opts, getProxyOpts(reqUrl, parse.hostname))
+    console.log('[i]', reqUrl, '->', opts.proxyCmd)
   }
-  else {
-    Object.assign(opts, proxy)
+  catch (err) {
+    return res.end(`HTTP/${req.httpVersion} 500 OK\r\n\r\n${err.message || err || 'Boom!'}`)
   }
 
   if (opts.useSocks) {
